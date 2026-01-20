@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.1] - 2026-01-20
+
+- [Changed] Refined duration adjustment logic to reduce cuts in moderate extensions
+- [Fixed] Prevented pause insertion from truncating word endings
+- [Changed] Added conservative handling for large extensions and compression limits
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
