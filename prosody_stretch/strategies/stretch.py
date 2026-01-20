@@ -13,7 +13,7 @@ class TimeStretcher:
     
     def __init__(
         self,
-        max_stretch_factor: float = 1.50,  # Max 50% slower
+        max_stretch_factor: float = 1.40,  # Max 40% slower
         min_stretch_factor: float = 0.60,  # Max 40% faster
     ):
         """

@@ -261,6 +261,8 @@ class AudioAnalyzer:
             return np.concatenate([audio1, audio2])
         
         overlap_samples = min(overlap_samples, len(audio1), len(audio2))
+        if overlap_samples <= 0:
+            return np.concatenate([audio1, audio2])
         
         fade_out = np.linspace(1, 0, overlap_samples)
         fade_in = np.linspace(0, 1, overlap_samples)

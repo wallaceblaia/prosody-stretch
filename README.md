@@ -36,10 +36,25 @@ pip install prosody-stretch[full]
 ### From Source
 
 ```bash
-git clone https://github.com/example/prosody-stretch.git
+git clone https://github.com/wallaceblaia/prosody-stretch.git
 cd prosody-stretch
 pip install -e .
 ```
+
+## 🔗 Dependencies
+
+### Core Dependencies
+- **[NumPy](https://numpy.org/)** - Array processing
+- **[SciPy](https://scipy.org/)** - Signal processing
+- **[librosa](https://librosa.org/)** - Audio analysis
+- **[SoundFile](https://pysoundfile.readthedocs.io/)** - Audio I/O
+- **[pytsmod](https://github.com/KAIST-MACLab/pytsmod)** - Time-scale modification (WSOLA)
+- **[Click](https://click.palletsprojects.com/)** - CLI framework
+
+### Optional Dependencies
+- **[FastAPI](https://fastapi.tiangolo.com/)** - REST API (install with `[api]`)
+- **[uvicorn](https://www.uvicorn.org/)** - ASGI server (install with `[api]`)
+- **[PyTorch](https://pytorch.org/)** - Deep learning (install with `[full]`)
 
 ## 🚀 Quick Start
 

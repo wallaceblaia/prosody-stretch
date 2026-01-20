@@ -27,6 +27,8 @@ class ProsodyStretcher:
         quality_threshold: float = 0.6,
         prefer_pauses: bool = True,
         sample_rate: int = 22050,
+        max_compression_ratio: float = 0.25,
+        max_extension_ratio: float = 0.45,
     ):
         """
         Initialize the prosody stretcher.
@@ -39,11 +41,13 @@ class ProsodyStretcher:
         self.quality_threshold = quality_threshold
         self.prefer_pauses = prefer_pauses
         self.sample_rate = sample_rate
+        self.max_compression_ratio = max_compression_ratio
+        self.max_extension_ratio = max_extension_ratio
         
         # Initialize components
         self.silence_detector = SilenceDetector(
-            min_silence_ms=80,
-            silence_thresh_db=-35,
+            min_silence_ms=30,
+            silence_thresh_db=-30,
         )
         
         # Use default config - it now maximizes all strategies to reach target
@@ -183,10 +187,75 @@ class ProsodyStretcher:
                 f"Low quality expected ({quality:.2f}): {desc}. "
                 "Consider regenerating TTS with adjusted speed."
             )
+
+        # For larger extensions, use conservative pause extension first,
+        # then a smaller full-audio stretch to reduce metallic artifacts.
+        extension_ratio = target_duration / current_duration
+        if target_duration > current_duration and extension_ratio >= 1.10:
+            conservative_detector = SilenceDetector(
+                min_silence_ms=120,
+                silence_thresh_db=-40,
+                min_speech_ms=80,
+            )
+            silences = conservative_detector.detect(audio, sr)
+            long_silences = [s for s in silences if s.duration >= 0.12]
+            remaining = target_duration - current_duration
+            result = audio
+
+            if long_silences and remaining > 0:
+                pause_available = sum(s.extensible_amount for s in long_silences)
+                pause_use = min(pause_available, remaining)
+                if pause_use > 0:
+                    result, actual = self.pause_manipulator.extend_pauses(
+                        result, sr, long_silences, pause_use
+                    )
+                    report.add_strategy('pause', actual)
+                    remaining -= actual
+
+            if remaining > 0.01:
+                result = self.time_stretcher.stretch_to_duration(
+                    result, sr, target_duration, method="wsola"
+                )
+                report.add_strategy('wsola', target_duration - current_duration)
+
+            report.final_duration = AudioAnalyzer.get_duration(result, sr)
+            report.quality_score = quality
+            return result, report
         
+        # Clamp excessive compression to avoid metallic artifacts
+        min_duration = current_duration * (1 - self.max_compression_ratio)
+        if target_duration < min_duration:
+            report.add_warning(
+                f"Target too short; clamped to {min_duration:.3f}s "
+                f"(-{self.max_compression_ratio*100:.0f}%)."
+            )
+            target_duration = min_duration
+
+        # Clamp excessive extension to avoid artifacts
+        max_duration = current_duration * (1 + self.max_extension_ratio)
+        if target_duration > max_duration:
+            report.add_warning(
+                f"Target too long; clamped to {max_duration:.3f}s "
+                f"(+{self.max_extension_ratio*100:.0f}%)."
+            )
+            target_duration = max_duration
+
         # Analyze audio
         silences = self.silence_detector.detect(audio, sr)
         speech_regions = self.silence_detector.get_speech_segments(audio, sr, silences)
+
+        # For moderate extensions, only use long pauses to avoid micro-cuts,
+        # and rely on speech-only stretching for the rest.
+        silences_for_plan = silences
+        if target_duration > current_duration:
+            extension_ratio = target_duration / current_duration
+            if 1.10 <= extension_ratio < 1.30:
+                conservative_detector = SilenceDetector(
+                    min_silence_ms=120,
+                    silence_thresh_db=-40,
+                    min_speech_ms=80,
+                )
+                silences_for_plan = conservative_detector.detect(audio, sr)
         
         # Create word segments from text if available
         word_segments = self._create_word_segments(text, speech_regions) if text else None
@@ -195,7 +264,7 @@ class ProsodyStretcher:
         plan = self.planner.plan(
             current_duration=current_duration,
             target_duration=target_duration,
-            silences=silences,
+            silences=silences_for_plan,
             word_segments=word_segments,
             speech_regions=speech_regions,
         )
@@ -249,10 +318,24 @@ class ProsodyStretcher:
             factors = [op.factor for op in stretch_ops]
             avg_factor = sum(factors) / len(factors)
             
-            # Apply to entire audio (simpler than segment-by-segment)
-            result = self.time_stretcher.stretch(result, sr, avg_factor)
+            # For compression, stretch full audio to avoid segment boundary artifacts.
+            # For extension, stretch only speech to avoid amplifying added pauses.
+            before = result
+            if avg_factor < 1.0:
+                # Use phase vocoder with phase locking for heavier compression
+                method = 'pv_int' if avg_factor < 0.81 else 'wsola'
+                result = self.time_stretcher.stretch(result, sr, avg_factor, method=method)
+            else:
+                # For large extensions, stretch full audio to avoid word cuts
+                if avg_factor >= 1.35:
+                    result = self.time_stretcher.stretch(result, sr, avg_factor)
+                else:
+                    result = self._stretch_speech_regions(result, sr, avg_factor)
             
-            stretch_adj = (avg_factor - 1) * AudioAnalyzer.get_duration(audio, sr)
+            stretch_adj = (
+                AudioAnalyzer.get_duration(result, sr)
+                - AudioAnalyzer.get_duration(before, sr)
+            )
             report.add_strategy('wsola', stretch_adj)
         
         # Apply vowel extension
@@ -266,6 +349,51 @@ class ProsodyStretcher:
                 report.add_strategy('vowel', actual)
         
         return result
+
+    def _stretch_speech_regions(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        factor: float
+    ) -> np.ndarray:
+        """
+        Stretch only speech regions, leaving detected silences untouched.
+        
+        This prevents pause manipulation from being amplified by stretching.
+        """
+        if abs(factor - 1.0) < 0.001:
+            return audio
+        
+        silences = self.silence_detector.detect(audio, sr)
+        speech_regions = self.silence_detector.get_speech_segments(
+            audio, sr, silences
+        )
+        
+        if not speech_regions:
+            return self.time_stretcher.stretch(audio, sr, factor)
+        
+        pieces = []
+        cursor = 0
+        
+        for start, end in speech_regions:
+            start_sample = int(start * sr)
+            end_sample = int(end * sr)
+            
+            if start_sample > cursor:
+                pieces.append(audio[cursor:start_sample])
+            
+            speech = audio[start_sample:end_sample]
+            stretched = self.time_stretcher.stretch(speech, sr, factor)
+            pieces.append(stretched)
+            cursor = end_sample
+        
+        if cursor < len(audio):
+            pieces.append(audio[cursor:])
+        
+        if not pieces:
+            return audio
+        
+        return np.concatenate(pieces)
     
     def _create_word_segments(
         self,

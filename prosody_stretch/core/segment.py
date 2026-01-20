@@ -37,8 +37,8 @@ class WordSegment(Segment):
 @dataclass
 class SilenceSegment(Segment):
     """A silence/pause segment."""
-    min_duration: float = 0.05  # Minimum natural pause (50ms)
-    max_extension: float = 0.5   # Maximum extension allowed (500ms)
+    min_duration: float = 0.01  # Minimum natural pause (10ms)
+    max_extension: float = 1.0   # Maximum extension allowed (1000ms)
     
     @property
     def extensible_amount(self) -> float:

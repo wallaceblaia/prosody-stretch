@@ -16,9 +16,9 @@ class PauseManipulator:
     
     def __init__(
         self,
-        min_pause_duration: float = 0.05,  # 50ms minimum pause
-        max_pause_extension: float = 0.5,   # 500ms max extension per pause
-        crossfade_ms: float = 10,           # Crossfade duration
+        min_pause_duration: float = 0.01,  # 10ms minimum pause
+        max_pause_extension: float = 1.0,   # 1000ms max extension per pause
+        crossfade_ms: float = 15,           # Crossfade duration
     ):
         """
         Initialize pause manipulator.
@@ -215,7 +215,9 @@ class PauseManipulator:
         duration: float
     ) -> np.ndarray:
         """Insert additional silence at a pause location."""
-        insert_point = int((silence.start_time + silence.duration / 2) * sr)
+        # Insert near the end of the detected silence to avoid cutting word endings.
+        safe_time = max(silence.start_time, silence.end_time - 0.01)
+        insert_point = int(safe_time * sr)
         insert_samples = int(duration * sr)
         
         # Create silence to insert

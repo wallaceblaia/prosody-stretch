@@ -19,7 +19,7 @@ class PlannerConfig:
     
     # Limits per strategy
     max_pause_extension: float = 1.0     # 1000ms max per pause
-    max_stretch_factor: float = 1.50     # 50% stretch max
+    max_stretch_factor: float = 1.40     # 40% stretch max
     min_stretch_factor: float = 0.60     # 40% compress max
     max_vowel_extension_ms: float = 100  # 100ms per word
     
