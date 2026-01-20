@@ -1,0 +1,64 @@
+[project]
+name = "prosody-stretch"
+version = "0.1.0"
+description = "Natural audio duration adjustment for dubbing synchronization"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Wallace", email = "wallace@example.com"}
+]
+keywords = ["audio", "tts", "dubbing", "speech", "prosody", "time-stretch"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.11.0",
+    "librosa>=0.10.0",
+    "soundfile>=0.12.0",
+    "pytsmod>=0.3.0",
+    "click>=8.0.0",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "python-multipart>=0.0.6",
+]
+full = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "python-multipart>=0.0.6",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+prosody-stretch = "prosody_stretch.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/example/prosody-stretch"
+Documentation = "https://github.com/example/prosody-stretch#readme"
+Repository = "https://github.com/example/prosody-stretch"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["prosody_stretch"]
